@@ -1,0 +1,13 @@
+{% extends "default.html" %}
+
+{% block title %}Sweets of the world{% endblock title %}
+
+{% block content %}
+    {% include "flash.html" %}
+    <main class="row">
+        <section class="col">
+            <h1>{{item.title}}</h1>
+            {{item.description}} 
+        </section>
+    </main>
+{% endblock content %}

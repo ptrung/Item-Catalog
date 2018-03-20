@@ -1,0 +1,29 @@
+{% extends "default.html" %}
+
+{% block title %}Sweets of the world{% endblock title %}
+
+{% block content %}
+    {% include "flash.html" %}
+    <main class="row">
+        <aside class="col-md-4">
+            <h1>Categories</h1>
+            <div class="list-group">
+                {% for c in categories %}
+                    {% if c.name==category.name %}
+                        <a href="{{url_for('show_category', category_name=c.name)}}" class="list-group-item list-group-item-action active">{{c.name}}</a>
+                    {% else %}
+                        <a href="{{url_for('show_category', category_name=c.name)}}" class="list-group-item list-group-item-action">{{c.name}}</a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </aside>
+        <section class="col-md-8">
+            <h1>{{category.name}}</h1>
+            <div class="list-group">
+                {% for i in items %}
+                    <a href="{{url_for('show_item', category_name=category.name, item_title=i.title)}}" class="list-group-item list-group-item-action">{{i.title}}</a>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+{% endblock content %}

@@ -1,0 +1,17 @@
+{% extends "default.html" %}
+
+{% block title %}Sweets of the world{% endblock title %}
+
+{% block content %}
+    <main class="row">
+        <section class="col text-center">
+           <h1>Delete Item</h1>
+                <form action='{{ url_for('delete_item', category_name=category_name, item_title = item_title)}}' method = 'post' id="itemform">
+                
+                    <p>Are you sure you want to delete <strong>{{item_title}}</strong> from <strong>{{category_name}}</strong>? </p>
+                    <input type='submit' value='Delete'  class="btn btn-warning btn-block">
+                    <a href='{{url_for('show_item', category_name=category_name, item_title = item_title)}}'  class="btn btn-secondary btn-block">Cancel</a>
+                </form>
+        </section>
+    </main>
+{% endblock content %}

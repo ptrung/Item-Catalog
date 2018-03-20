@@ -1,0 +1,19 @@
+h1 {
+    font-variant: small-caps;
+}
+
+.navbar {
+    margin-bottom: 10px;
+}
+
+.bg-dark {
+    background-color: #e83e8c!important;
+}
+
+.logo {
+    height: 50px;
+}
+
+.container {
+    padding: 10px;
+}
