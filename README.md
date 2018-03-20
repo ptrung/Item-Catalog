@@ -29,9 +29,13 @@ First of all, you have to install the following programms:
 
 ## JSON Endpoint
 You can use the following JSON Endpoints
+
 `/catalog.json` - Data of the whole catalog with categories and items. 
+
 `/categories.json` - Data of all categories
+
 `/catalog/<path:category_name>.json` - Data of the items of a specific category
+
 `/catalog/<path:category_name>/<path:item_title>.json` - Data of a specific item
 
 ## Acknowledge
