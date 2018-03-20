@@ -36,23 +36,6 @@ APPLICATION_NAME = "Sweets Catalog"
 # Login Page for GConnect
 @app.route('/login/')
 def show_login():
-    """Fetches rows from a Bigtable.
-
-    Retrieves rows pertaining to the given keys from the Table instance
-    represented by big_table.  Silly things may happen if
-    other_silly_variable is not None.
-
-    Args:
-        big_table: An open Bigtable Table instance.
-        keys: A sequence of strings representing the key of each table row
-            to fetch.
-        other_silly_variable: Another optional variable, that has a much
-            longer name than the other args, and which does nothing.
-
-    Returns:
-        A dict mapping keys to the corresponding table row data
-        fetched.
-    """
     state = ''.join(random.choice(string.ascii_uppercase + string.digits)
                     for x in xrange(32))
     login_session['state'] = state
