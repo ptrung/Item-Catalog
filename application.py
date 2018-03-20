@@ -17,21 +17,42 @@ import httplib2
 import json
 import requests
 
+# Flask instance
 app = Flask(__name__)
 
+# DB session
 engine = create_engine('sqlite:///catalog.db')
 Base.metadata.bind = engine
-
 DBSession = sessionmaker(bind=engine)
 session = DBSession()
 
+# Google Client Secret
 CLIENT_ID = json.loads(open('client_secrets.json', 'r')
                        .read())['web']['client_id']
 APPLICATION_NAME = "Sweets Catalog"
 
 
+# FLASK ROUTING
+# Login Page for GConnect
 @app.route('/login/')
 def show_login():
+    """Fetches rows from a Bigtable.
+
+    Retrieves rows pertaining to the given keys from the Table instance
+    represented by big_table.  Silly things may happen if
+    other_silly_variable is not None.
+
+    Args:
+        big_table: An open Bigtable Table instance.
+        keys: A sequence of strings representing the key of each table row
+            to fetch.
+        other_silly_variable: Another optional variable, that has a much
+            longer name than the other args, and which does nothing.
+
+    Returns:
+        A dict mapping keys to the corresponding table row data
+        fetched.
+    """
     state = ''.join(random.choice(string.ascii_uppercase + string.digits)
                     for x in xrange(32))
     login_session['state'] = state
@@ -127,6 +148,7 @@ def gconnect():
     return output
 
 
+# DISCONNECT - Revoke a current user's token and reset their login_session
 @app.route('/gdisconnect')
 def gdisconnect():
     access_token = login_session.get('access_token')
@@ -151,8 +173,9 @@ def gdisconnect():
         del login_session['username']
         del login_session['email']
         del login_session['picture']
-        response = make_response(json.dumps('Successfully disconnected.'), 200)
-        response.headers['Content-Type'] = 'application/json'
+
+        response = redirect(url_for('show_catalog'))
+        flash("You are now logged out.")
         return response
     else:
         response = make_response(
@@ -161,6 +184,31 @@ def gdisconnect():
         return response
 
 
+# User Helper Functions
+def create_user(login_session):
+    newUser = User(name=login_session['username'],
+                   email=login_session['email'],
+                   picture=login_session['picture'])
+    session.add(newUser)
+    session.commit()
+    user = session.query(User).filter_by(email=login_session['email']).one()
+    return user.id
+
+
+def get_userinfo(user_id):
+    user = session.query(User).filter_by(id=user_id).one()
+    return user
+
+
+def get_userid(email):
+    try:
+        user = session.query(User).filter_by(email=email).one()
+        return user.id
+    except:
+        return None
+
+
+# Show the main page of the catalog (categories & latest items)
 @app.route('/')
 @app.route('/catalog/')
 def show_catalog():
@@ -171,6 +219,7 @@ def show_catalog():
                            categories=categories, latestItems=latestItems)
 
 
+# Show the items of a specific category
 @app.route('/catalog/<path:category_name>/')
 @app.route('/catalog/<path:category_name>/items/')
 def show_category(category_name):
@@ -189,6 +238,7 @@ def show_category(category_name):
             categories=categories, category=category, items=items)
 
 
+# Show the description of a specific item
 @app.route('/catalog/<path:category_name>/<path:item_title>')
 def show_item(category_name, item_title):
     category = session.query(Category).filter_by(name=category_name).one()
@@ -196,8 +246,8 @@ def show_item(category_name, item_title):
         category=category).filter_by(title=item_title).one()
     creator = get_userinfo(item.user_id)
 
-    if 'username' not in login_session or creator.id != login_session[
-        'user_id']:
+    if 'username' not in login_session or \
+       creator.id != login_session['user_id']:
         return render_template(
             'showPublicItem.html',
             category_name=category_name, item=item)
@@ -207,25 +257,36 @@ def show_item(category_name, item_title):
             category_name=category_name, item=item)
 
 
+# Create a new item
 @app.route('/catalog/<path:category_name>/new/', methods=['GET', 'POST'])
 def new_item(category_name):
+    categories = session.query(Category).all()
     category = session.query(Category).filter_by(name=category_name).one()
-    if request.method == 'POST':
-        newItem = Item(title=request.form['title'],
-                       description=request.form['description'],
-                       category=category,
-                       user_id=login_session['user_id'])
-        session.add(newItem)
-        session.commit()
-        return redirect(url_for(
-            'show_item',
-            category_name=category_name, item_title=newItem.title))
+    items = session.query(Item).filter_by(
+        category=category).order_by(asc(Item.title)).limit(5)
+
+    if 'username' in login_session and login_session['username'] != 'null':
+        if request.method == 'POST':
+            newItem = Item(title=request.form['title'],
+                           description=request.form['description'],
+                           category=category,
+                           user_id=login_session['user_id'])
+            session.add(newItem)
+            session.commit()
+            return redirect(url_for(
+                'show_item',
+                category_name=category_name, item_title=newItem.title))
+        else:
+            return render_template(
+                'newItem.html',
+                category_name=category_name)
     else:
-        return render_template(
-            'newItem.html',
-            category_name=category_name)
+        flash("Please log in to add an item!")
+        return redirect(url_for(
+            'show_category', category_name=category_name))
 
 
+# Edit an existing item
 @app.route('/catalog/<path:category_name>/<path:item_title>/edit/',
            methods=['GET', 'POST'])
 def edit_item(category_name, item_title):
@@ -234,45 +295,73 @@ def edit_item(category_name, item_title):
         name=category_name).one()
     item = session.query(Item).filter_by(
         category=category).filter_by(title=item_title).one()
-    if request.method == 'POST':
-        item.title = request.form['title']
-        item.description = request.form['description']
-        if request.form['category'] != category_name:
-            category = session.query(Category).filter_by(
-                name=request.form['category']).one()
-            item.category = category
-        session.add(item)
-        session.commit()
-        flash('The item is updated!')
+
+    if 'username' in login_session and login_session['username'] != 'null':
+        if get_userinfo(item.user_id).id == login_session['user_id']:
+            if request.method == 'POST':
+                item.title = request.form['title']
+                item.description = request.form['description']
+                if request.form['category'] != category_name:
+                    category = session.query(Category).filter_by(
+                        name=request.form['category']).one()
+                    item.category = category
+                session.add(item)
+                session.commit()
+                flash('The item is updated!')
+                return redirect(url_for(
+                    'show_item',
+                    category_name=item.category.name, item_title=item.title))
+            else:
+                return render_template(
+                    'editItem.html',
+                    category_name=category_name, item_title=item_title,
+                    item=item, categories=categories)
+        else:
+            flash("Only the owner is allowed to edit the item!")
+            return redirect(url_for(
+                'show_item',
+                category_name=category_name, item_title=item_title))
+    else:
+        flash("Please log in to edit the item!")
         return redirect(url_for(
             'show_item',
-            category_name=item.category.name, item_title=item.title))
-    else:
-        return render_template(
-            'editItem.html',
-            category_name=category_name, item_title=item_title,
-            item=item, categories=categories)
+            category_name=category_name, item_title=item_title))
 
 
+# Delete an existing item
 @app.route('/catalog/<path:category_name>/<path:item_title>/delete/',
            methods=['GET', 'POST'])
 def delete_item(category_name, item_title):
     category = session.query(Category).filter_by(name=category_name).one()
     item = session.query(Item).filter_by(
         category=category).filter_by(title=item_title).one()
-    if request.method == 'POST':
-        session.delete(item)
-        session.commit()
-        flash('The item is deleted!')
-        return redirect(url_for(
-            'show_category',
-            category_name=category_name))
+
+    if 'username' in login_session and login_session['username'] != 'null':
+        if get_userinfo(item.user_id).id == login_session['user_id']:
+            if request.method == 'POST':
+                session.delete(item)
+                session.commit()
+                flash('The item is deleted!')
+                return redirect(url_for(
+                    'show_category',
+                    category_name=category_name))
+            else:
+                return render_template(
+                    'deleteItem.html',
+                    category_name=category_name, item_title=item_title)
+        else:
+            flash("Only the owner is allowed to delete the item!")
+            return redirect(url_for(
+                'show_item',
+                category_name=category_name, item_title=item_title))
     else:
-        return render_template(
-            'deleteItem.html',
-            category_name=category_name, item_title=item_title)
+        flash("Please log in to delete the item!")
+        return redirect(url_for(
+            'show_item',
+            category_name=category_name, item_title=item_title))
 
 
+# JSON APIs to view catalog data
 @app.route('/catalog.json')
 def catalogJSON():
     categories = session.query(Category).all()
@@ -305,29 +394,6 @@ def catalogItemJSON(category_name, item_title):
     item = session.query(Item).filter_by(
         category=category).filter_by(title=item_title).one()
     return jsonify(Items=item.serialize)
-
-
-def create_user(login_session):
-    newUser = User(name=login_session['username'],
-                   email=login_session['email'],
-                   picture=login_session['picture'])
-    session.add(newUser)
-    session.commit()
-    user = session.query(User).filter_by(email=login_session['email']).one()
-    return user.id
-
-
-def get_userinfo(user_id):
-    user = session.query(User).filter_by(id=user_id).one()
-    return user
-
-
-def get_userid(email):
-    try:
-        user = session.query(User).filter_by(email=email).one()
-        return user.id
-    except:
-        return None
 
 
 if __name__ == '__main__':
